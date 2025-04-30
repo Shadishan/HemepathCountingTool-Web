@@ -156,19 +156,19 @@
         nrbc:{name:'NRBCs',modes:['pb']},
         erythroid:{name:'Erythroid Precursors',modes:['bm'],erythroid:true},
         other:{name:'Other',modes:['pb','bm'],excludeME:true},
-        myeloblasts:{name:'Myeloblasts',modes:['bm'],myeloid:true},
+        blasts:{name:'Blasts',modes:['bm'],myeloid:true},
         plasmaCells:{name:'Plasma Cells',modes:['bm'],excludeME:true}
       };
 
       // PB grid (no blasts)
       const PB_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','nrbc','other'];
       // BM grid (erythroid before other)
-      const BM_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','erythroid','other','myeloblasts','plasmaCells'];
+      const BM_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','erythroid','other','blasts','plasmaCells'];
 
       const DEFAULT_SHORTCUTS={
         neutrophils:'Q',lymphocytes:'W',monocytes:'E',eosinophils:'R',basophils:'T',
         metamyelocytes:'A',myelocytes:'S',promyelocytes:'D',nrbc:'G',other:'H',
-        erythroid:'C',myeloblasts:'Z',plasmaCells:'X'
+        erythroid:'C',blasts:'Z',plasmaCells:'X'
       };
 
       /* ---------- STATE ---------- */
