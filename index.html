@@ -25,7 +25,7 @@
       /* ─── Controls ─── */
       .controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:center;margin-bottom:1rem;}
       .control-label{font-weight:600;}
-      #totalCells{width:5rem;padding:.25rem;}
+      #totalCells,#ageInput{width:5rem;padding:.25rem;}
       .view-toggle{display:flex;gap:.25rem;}
       .toggle{padding:.4rem .75rem;border:1px solid var(--border);background:var(--card);cursor:pointer;border-radius:.25rem;}
       .toggle.active{background:var(--unm-teal);color:#fff;border-color:var(--unm-teal);}
@@ -75,6 +75,8 @@
       <section class="controls">
         <label for="totalCells" class="control-label">Total cells to count:</label>
         <input type="number" id="totalCells" min="1" value="100" />
+        <label for="ageInput" class="control-label">Age (years):</label>
+        <input type="number" id="ageInput" min="0" step="0.1" value="16" />
         <div class="view-toggle" role="tablist">
           <button id="btnPB" class="toggle active" role="tab" aria-selected="true">Peripheral Blood</button>
           <button id="btnBM" class="toggle" role="tab" aria-selected="false">Bone Marrow</button>
@@ -104,7 +106,14 @@
           <input type="number" id="wbcCount" min="0" step="0.1" value="4.5" />
         </div>
         <table id="calcTable">
-          <thead><tr><th>Cell</th><th>Relative %</th><th>Absolute (×10³/µL)</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Cell</th>
+              <th>Relative %</th>
+              <th>Absolute (×10³/µL)</th>
+              <th>Ref Range</th>
+            </tr>
+          </thead>
           <tbody></tbody>
         </table>
       </details>
@@ -154,22 +163,51 @@
         myelocytes:{name:'Myelocytes',modes:['pb','bm'],myeloid:true},
         promyelocytes:{name:'Promyelocytes',modes:['pb','bm'],myeloid:true},
         nrbc:{name:'NRBCs',modes:['pb']},
+        blasts:{name:'Blasts',modes:['pb','bm'],myeloid:true},
         erythroid:{name:'Erythroid Precursors',modes:['bm'],erythroid:true},
         other:{name:'Other',modes:['pb','bm'],excludeME:true},
-        blasts:{name:'Blasts',modes:['bm'],myeloid:true},
         plasmaCells:{name:'Plasma Cells',modes:['bm'],excludeME:true}
       };
 
-      // PB grid (no blasts)
-      const PB_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','nrbc','other'];
-      // BM grid (erythroid before other)
+      // PB grid now includes blasts and NRBC for counting
+      const PB_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','blasts','nrbc','other'];
       const BM_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','erythroid','other','blasts','plasmaCells'];
 
       const DEFAULT_SHORTCUTS={
         neutrophils:'Q',lymphocytes:'W',monocytes:'E',eosinophils:'R',basophils:'T',
-        metamyelocytes:'A',myelocytes:'S',promyelocytes:'D',nrbc:'G',other:'H',
-        erythroid:'C',blasts:'Z',plasmaCells:'X'
+        metamyelocytes:'A',myelocytes:'S',promyelocytes:'D',nrbc:'G',blasts:'Z',other:'H',
+        erythroid:'C',plasmaCells:'X'
       };
+
+      /* Reference ranges for PB differential by age in years */
+      function getRefRange(id, age) {
+        const ranges = {
+          neutrophils: [
+            {max:1/365,range:'53-66%'},
+            {max:1/12,range:'36-54%'},
+            {max:2,range:'19-43%'},
+            {max:10,range:'31-56%'},
+            {max:16,range:'32-58%'},
+            {max:150,range:'40-76%'}
+          ],
+          lymphocytes: [
+            {max:1/365,range:'26-36%'},
+            {max:1/12,range:'36-72%'},
+            {max:2,range:'41-77%'},
+            {max:10,range:'28-65%'},
+            {max:16,range:'15-48%'},
+            {max:150,range:'16-47%'}
+          ],
+          monocytes: [ {max:150,range:'3-13%'} ],
+          eosinophils: [ {max:150,range:'0-5%'} ],
+          basophils: [ {max:150,range:'0-2%'} ],
+          blasts: [ {max:150,range:'0-1%'} ]
+        };
+        const cellRanges = ranges[id];
+        if(!cellRanges) return '-';
+        for(const r of cellRanges) if(age <= r.max) return r.range;
+        return '-';
+      }
 
       /* ---------- STATE ---------- */
       const state={mode:'pb',totalCells:100,counts:{pb:{},bm:{}},shortcuts:{...DEFAULT_SHORTCUTS}};
@@ -183,145 +221,77 @@
 
       function save(){localStorage.setItem('hematopathState',JSON.stringify(state));}
       function load(){
-        try{
-          const d=JSON.parse(localStorage.getItem('hematopathState')||'null');
-          if(!d) return;
+        try{const d=JSON.parse(localStorage.getItem('hematopathState')||'null');if(!d) return;
           state.totalCells=d.totalCells||state.totalCells;
-          ['pb','bm'].forEach(m=>Object.keys(state.counts[m]).forEach(cid=>{
-            const v=d.counts?.[m]?.[cid];if(Number.isFinite(v)&&v>=0) state.counts[m][cid]=v;
-          }));
+          ['pb','bm'].forEach(m=>Object.keys(state.counts[m]).forEach(cid=>{const v=d.counts?.[m]?.[cid];if(Number.isFinite(v)&&v>=0) state.counts[m][cid]=v;}));
           Object.keys(state.shortcuts).forEach(cid=>{const k=d.shortcuts?.[cid];if(k!==undefined) state.shortcuts[cid]=k;});
         }catch(e){}
       }
 
       /* ---------- Build UI ---------- */
-      function buildGrid(panelId,ids){
-        const grid=el(panelId);grid.innerHTML='';
-        ids.forEach(id=>grid.insertAdjacentHTML('beforeend',
-          `<div class="cell-counter" data-cell="${id}">
-            <span class="cell-label">${labelFor(id)}</span>
-            <div class="btn-group">
-              <button class="minus">&ndash;</button><span class="count">${state.counts[state.mode][id]||0}</span><button class="plus">+</button>
-            </div>
-          </div>`));
-      }
-      function buildShortcutTable(){
-        const tbody=el('shortcutTable').querySelector('tbody');tbody.innerHTML='';
-        const all=[...new Set([...PB_CELLS,...BM_CELLS])];
-        all.forEach(id=>tbody.insertAdjacentHTML('beforeend',
-          `<tr><td>${CELL_MAP[id].name}</td><td><input class="shortcut-input" data-cell="${id}" value="${state.shortcuts[id]||''}" maxlength="1"></td></tr>`));
-      }
-      function updateLabels(){
-        document.querySelectorAll('.cell-counter .cell-label').forEach(lbl=>lbl.textContent=labelFor(lbl.parentElement.dataset.cell));
-      }
-      function refreshCounts(mode){
-        document.querySelectorAll(`#${mode==='pb'?'pb':'bm'}Grid .cell-counter`).forEach(div=>{
-          div.querySelector('.count').textContent=state.counts[mode][div.dataset.cell];
-        });
-      }
+      function buildGrid(panelId,ids){const grid=el(panelId);grid.innerHTML='';ids.forEach(id=>grid.insertAdjacentHTML('beforeend',
+        `<div class="cell-counter" data-cell="${id}">
+          <span class="cell-label">${labelFor(id)}</span>
+          <div class="btn-group">
+            <button class="minus">&ndash;</button><span class="count">${state.counts[state.mode][id]||0}</span><button class="plus">+</button>
+          </div>
+        </div>`));}
+      function buildShortcutTable(){const tbody=el('shortcutTable').querySelector('tbody');tbody.innerHTML='';
+        [...new Set([...PB_CELLS,...BM_CELLS])].forEach(id=>tbody.insertAdjacentHTML('beforeend',
+          `<tr><td>${CELL_MAP[id].name}</td><td><input class="shortcut-input" data-cell="${id}" value="${state.shortcuts[id]||''}" maxlength="1"></td></tr>`));}
+      function updateLabels(){document.querySelectorAll('.cell-counter .cell-label').forEach(lbl=>lbl.textContent=labelFor(lbl.parentElement.dataset.cell));}
+      function refreshCounts(mode){document.querySelectorAll(`#${mode==='pb'?'pb':'bm'}Grid .cell-counter`).forEach(div=>{div.querySelector('.count').textContent=state.counts[mode][div.dataset.cell];});}
 
       /* ---------- Calculations ---------- */
-      function updateTotals(){
-        const m=state.mode;const t=Object.values(state.counts[m]).reduce((a,b)=>a+b,0);const rem=state.totalCells-t;
+      function updateTotals(){const m=state.mode;const t=Object.values(state.counts[m]).reduce((a,b)=>a+b,0);const rem=state.totalCells-t;
         el(m==='pb'?'pbTotal':'bmTotal').textContent=t;
         el(m==='pb'?'pbRemaining':'bmRemaining').textContent=rem;
-        if(rem===0) beep();
-        if(m==='bm') calcME(); else calcTable();
-        save();
-      }
-      function calcME(){
-        const c=state.counts.bm;let my=0,er=0;
-        BM_CELLS.forEach(id=>{const cfg=CELL_MAP[id];if(cfg.myeloid)my+=c[id];if(cfg.erythroid)er+=c[id];});
-        el('meRatio').textContent=er?(my/er).toFixed(2):'-';
-      }
-      function calcTable(){
-        if(state.mode!=='pb') return;
+        if(rem===0) beep(); if(m==='bm') calcME(); else calcTable(); save();}
+      function calcME(){const c=state.counts.bm;let my=0,er=0;BM_CELLS.forEach(id=>{const cfg=CELL_MAP[id];if(cfg.myeloid)my+=c[id];if(cfg.erythroid)er+=c[id];});el('meRatio').textContent=er?(my/er).toFixed(2):'-';}
+      function calcTable(){if(state.mode!=='pb') return;
         const tbody=el('calcTable').querySelector('tbody');tbody.innerHTML='';
-        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const w=parseFloat(el('wbcCount').value)||0;
+        const w=parseFloat(el('wbcCount').value)||0;
+        const age=parseFloat(el('ageInput').value)||0;
+        const totalLeuks = Object.entries(state.counts.pb).reduce((sum,[id,count])=> id==='nrbc' ? sum : sum+count,0) ||1;
         PB_CELLS.forEach(id=>{
-          const cnt=state.counts.pb[id];const rel=(cnt/total)*100;const abs=w*rel/100;
-          tbody.insertAdjacentHTML('beforeend',`<tr><td>${labelFor(id)}</td><td>${pct(rel)}</td><td>${abs.toFixed(2)}</td></tr>`);
+          if(id==='nrbc') return;
+          const cnt=state.counts.pb[id];
+          const rel=(cnt/totalLeuks)*100;
+          const abs = (w*rel/100);
+          const ref = getRefRange(id,age);
+          tbody.insertAdjacentHTML('beforeend',
+            `<tr><td>${labelFor(id)}</td><td>${pct(rel)}</td><td>${abs.toFixed(2)}</td><td>${ref}</td></tr>`);
         });
       }
 
       /* ---------- Count Change ---------- */
-      function changeCount(id,delta){
-        const m=state.mode;const c=state.counts[m];const newVal=Math.max(0,c[id]+delta);
+      function changeCount(id,delta){const m=state.mode;const c=state.counts[m];const newVal=Math.max(0,c[id]+delta);
         if(delta>0 && Object.values(c).reduce((a,b)=>a+b,0)>=state.totalCells) return;
-        if(newVal===c[id]) return;
-        c[id]=newVal;
+        if(newVal===c[id]) return; c[id]=newVal;
         document.querySelector(`.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`).textContent=newVal;
-        updateTotals();
-      }
+        updateTotals();}
 
       /* ---------- Initialise UI ---------- */
-      load();
-      buildGrid('pbGrid',PB_CELLS);
-      buildGrid('bmGrid',BM_CELLS);
-      buildShortcutTable();
-      el('totalCells').value=state.totalCells;
-      updateLabels();
-      refreshCounts('pb');refreshCounts('bm');
-      calcTable();
+      load();buildGrid('pbGrid',PB_CELLS);buildGrid('bmGrid',BM_CELLS);buildShortcutTable();el('totalCells').value=state.totalCells;
+      updateLabels();refreshCounts('pb');refreshCounts('bm');calcTable();
 
       /* ---------- Event Listeners ---------- */
-      document.addEventListener('click',e=>{
-        if(e.target.matches('.plus')) changeCount(e.target.closest('.cell-counter').dataset.cell,1);
+      document.addEventListener('click',e=>{if(e.target.matches('.plus')) changeCount(e.target.closest('.cell-counter').dataset.cell,1);
         else if(e.target.matches('.minus')) changeCount(e.target.closest('.cell-counter').dataset.cell,-1);
         else if(e.target.id==='btnPB'||e.target.id==='btnBM'){
-          state.mode=e.target.id==='btnPB'?'pb':'bm';
-          btnPB.classList.toggle('active',state.mode==='pb');
-          btnBM.classList.toggle('active',state.mode==='bm');
-          pbPanel.classList.toggle('hidden',state.mode!=='pb');
-          bmPanel.classList.toggle('hidden',state.mode!=='bm');
-          calcPanel.classList.toggle('hidden',state.mode!=='pb');
-          updateTotals();
-        }else if(e.target.id==='resetBtn'){
-          Object.keys(state.counts[state.mode]).forEach(cid=>state.counts[state.mode][cid]=0);
-          refreshCounts(state.mode);
-          updateTotals();
-        }
-      });
-
+          state.mode=e.target.id==='btnPB'?'pb':'bm';btnPB.classList.toggle('active',state.mode==='pb');btnBM.classList.toggle('active',state.mode==='bm');
+          pbPanel.classList.toggle('hidden',state.mode!=='pb');bmPanel.classList.toggle('hidden',state.mode!=='bm');calcPanel.classList.toggle('hidden',state.mode!=='pb');updateTotals();}
+        else if(e.target.id==='resetBtn'){Object.keys(state.counts[state.mode]).forEach(cid=>state.counts[state.mode][cid]=0);refreshCounts(state.mode);updateTotals();}});
       el('totalCells').addEventListener('input',e=>{state.totalCells=parseInt(e.target.value)||1;updateTotals();});
+      el('ageInput').addEventListener('input',calcTable);
       el('wbcCount').addEventListener('input',calcTable);
-
-      // shortcut remap
-      document.addEventListener('input',e=>{
-        if(e.target.matches('.shortcut-input')){
-          const cid=e.target.dataset.cell;const val=e.target.value.toUpperCase();
-          // prevent duplicates
-          Object.keys(state.shortcuts).forEach(k=>{if(state.shortcuts[k]===val) state.shortcuts[k]='';});
-          state.shortcuts[cid]=val;
-          buildShortcutTable();
-          updateLabels();
-          calcTable();
-          save();
-        }
-      });
-
-      // keyboard shortcuts (+1 / -1)
-      document.addEventListener('keydown',e=>{
-        if(document.activeElement && document.activeElement.matches('input,textarea')) return;
-        const key=e.key.toUpperCase();
-        const cid=Object.keys(state.shortcuts).find(id=>state.shortcuts[id]===key);
-        if(!cid) return;
-        changeCount(cid,e.shiftKey?-1:1);
-        e.preventDefault();
-      });
+      document.addEventListener('input',e=>{if(e.target.matches('.shortcut-input')){const cid=e.target.dataset.cell;const val=e.target.value.toUpperCase();Object.keys(state.shortcuts).forEach(k=>{if(state.shortcuts[k]===val) state.shortcuts[k]='';});state.shortcuts[cid]=val;buildShortcutTable();updateLabels();calcTable();save();}});
+      document.addEventListener('keydown',e=>{if(document.activeElement && document.activeElement.matches('input,textarea')) return;const key=e.key.toUpperCase();const cid=Object.keys(state.shortcuts).find(id=>state.shortcuts[id]===key);if(!cid) return;changeCount(cid,e.shiftKey?-1:1);e.preventDefault();});
 
       /* ---------- Export ---------- */
       function clip(txt){navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));}
-      el('copyTable').addEventListener('click',()=>{
-        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const w=parseFloat(el('wbcCount').value)||0;let rows=['Cell\tRel %\tAbs (x10^3/µL)'];
-        PB_CELLS.forEach(id=>{const c=state.counts.pb[id];const r=(c/total*100).toFixed(1);const a=(w*r/100).toFixed(2);rows.push(`${CELL_MAP[id].name}\t${r}\t${a}`);});
-        clip(rows.join('\n'));
-      });
-      el('copyParagraph').addEventListener('click',()=>{
-        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const parts=[];
-        PB_CELLS.forEach(id=>{const c=state.counts.pb[id];if(c){const r=(c/total*100).toFixed(1);parts.push(`${c} ${CELL_MAP[id].name} (${r}%)`);}});
-        clip(parts.join(', '));
-      });
+      el('copyTable').addEventListener('click',()=>{const age=parseFloat(el('ageInput').value)||0;let rows=['Cell\tRel %\tAbs (x10^3/µL)\tRef Range'];const total=Object.entries(state.counts.pb).reduce((sum,[id,count])=> id==='nrbc'? sum : sum+count,0)||1;const w=parseFloat(el('wbcCount').value)||0;PB_CELLS.forEach(id=>{if(id==='nrbc') return;const c=state.counts.pb[id];const r=(c/total*100).toFixed(1);const a=(w*r/100).toFixed(2);const ref=getRefRange(id,age);rows.push(`${CELL_MAP[id].name}\t${r}\t${a}\t${ref}`);});clip(rows.join('\n'));});
+      el('copyParagraph').addEventListener('click',()=>{const age=parseFloat(el('ageInput').value)||0;const total=Object.entries(state.counts.pb).reduce((sum,[id,count])=> id==='nrbc'? sum : sum+count,0)||1;const parts=[];PB_CELLS.forEach(id=>{if(id==='nrbc') return;const c=state.counts.pb[id];if(c){const r=(c/total*100).toFixed(1);const ref=getRefRange(id,age);parts.push(`${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`);}});clip(parts.join(', '));});
     </script>
   </body>
 </html>
