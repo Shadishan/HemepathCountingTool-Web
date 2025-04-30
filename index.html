@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hematopathology Counting Tool</title>
+
+    <!-- ===== Inline Styles (UNM palette) ===== -->
+    <style>
+      :root{
+        --unm-red:#b0043c;
+        --unm-teal:#008488;
+        --bg:#f8f9fa;
+        --card:#ffffff;
+        --border:#e2e6ea;
+      }
+      *{box-sizing:border-box;font-family:system-ui,Arial,sans-serif;}
+      body{margin:0;background:var(--bg);}
+      .container{max-width:560px;margin:0 auto;padding:1rem;}
+      header{text-align:center;padding:.5rem 0 1rem;}
+      .logo-wrap{display:flex;justify-content:center;gap:.75rem;align-items:center;}
+      .logo{max-height:46px;object-fit:contain;}
+      .app-title{margin:.25rem 0 0;color:var(--unm-red);}
+
+      /* ─── Controls ─── */
+      .controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:center;margin-bottom:1rem;}
+      .control-label{font-weight:600;}
+      #totalCells{width:5rem;padding:.25rem;}
+      .view-toggle{display:flex;gap:.25rem;}
+      .toggle{padding:.4rem .75rem;border:1px solid var(--border);background:var(--card);cursor:pointer;border-radius:.25rem;}
+      .toggle.active{background:var(--unm-teal);color:#fff;border-color:var(--unm-teal);}
+      .reset{background:#c82333;color:#fff;border-color:#c82333;}
+
+      /* ─── Grid ─── */
+      .panel-title{margin-top:0;}
+      .panel.hidden{display:none;}
+      .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem;}
+      @media(min-width:480px){.grid{grid-template-columns:repeat(3,1fr);}}
+      .cell-counter{background:var(--card);border:1px solid var(--border);padding:.5rem;border-radius:.5rem;display:flex;flex-direction:column;align-items:center;}
+      .cell-label{font-size:.9rem;margin-bottom:.25rem;text-align:center;min-height:2.2em;}
+      .btn-group{display:flex;align-items:center;gap:.25rem;}
+      .btn-group button{width:1.5rem;height:1.5rem;border:none;border-radius:50%;background:var(--unm-teal);color:#fff;font-weight:bold;cursor:pointer;}
+      .btn-group .minus{background:#555;}
+      .count{min-width:1.5rem;text-align:center;}
+      .totals{font-weight:600;text-align:center;}
+
+      /* ─── Details / tables ─── */
+      details{background:var(--card);border:1px solid var(--border);border-radius:.5rem;padding:.5rem 1rem;margin:1rem 0;}
+      summary{cursor:pointer;font-weight:600;}
+      table{width:100%;border-collapse:collapse;margin-top:.5rem;}
+      th,td{border:1px solid var(--border);padding:.25rem;text-align:center;}
+
+      /* ─── Shortcuts table ─── */
+      .shortcut-table{width:100%;border-collapse:collapse;margin-top:.5rem;}
+      .shortcut-table th,.shortcut-table td{border:1px solid var(--border);padding:.25rem;text-align:center;}
+      .shortcut-input{width:3rem;text-transform:uppercase;}
+
+      /* ─── Export buttons ─── */
+      .export-btn{padding:.5rem .75rem;border:1px solid var(--unm-teal);background:var(--unm-teal);color:#fff;border-radius:.25rem;cursor:pointer;margin-right:.5rem;}
+      .export-btn:hover{opacity:.85;}
+    </style>
+  </head>
+  <body>
+    <!-- ===== Header ===== -->
+    <header>
+      <div class="logo-wrap">
+        <img src="images/unm_logo.png" alt="UNM Health Sciences Logo" class="logo" />
+        <img src="images/tricore_logo.png" alt="TriCore Reference Laboratories Logo" class="logo" />
+      </div>
+      <h1 class="app-title">Hematopathology Counting Tool</h1>
+    </header>
+
+    <main class="container">
+      <!-- ===== Controls ===== -->
+      <section class="controls">
+        <label for="totalCells" class="control-label">Total cells to count:</label>
+        <input type="number" id="totalCells" min="1" value="100" />
+        <div class="view-toggle" role="tablist">
+          <button id="btnPB" class="toggle active" role="tab" aria-selected="true">Peripheral Blood</button>
+          <button id="btnBM" class="toggle" role="tab" aria-selected="false">Bone Marrow</button>
+        </div>
+        <button id="resetBtn" class="toggle reset" title="Reset counts (active tab)">Reset</button>
+      </section>
+
+      <!-- ===== Peripheral Blood Panel ===== -->
+      <section id="pbPanel" class="panel" aria-labelledby="btnPB">
+        <h2 class="panel-title">Peripheral Blood Differential</h2>
+        <div class="grid" id="pbGrid"></div>
+        <p class="totals">Total: <span id="pbTotal">0</span> | Remaining: <span id="pbRemaining">100</span></p>
+      </section>
+
+      <!-- ===== Bone Marrow Panel ===== -->
+      <section id="bmPanel" class="panel hidden" aria-labelledby="btnBM">
+        <h2 class="panel-title">Bone Marrow Differential</h2>
+        <div class="grid" id="bmGrid"></div>
+        <p class="totals">Total: <span id="bmTotal">0</span> | Remaining: <span id="bmRemaining">100</span> | M:E Ratio: <span id="meRatio">-</span></p>
+      </section>
+
+      <!-- ===== Calculations (PB only) ===== -->
+      <details id="calcPanel" open>
+        <summary>Peripheral Blood Smear Calculations (Relative % &amp; Absolute Counts)</summary>
+        <div class="wbc-input">
+          <label for="wbcCount">WBC Count (×10³/µL):</label>
+          <input type="number" id="wbcCount" min="0" step="0.1" value="4.5" />
+        </div>
+        <table id="calcTable">
+          <thead><tr><th>Cell</th><th>Relative %</th><th>Absolute (×10³/µL)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </details>
+
+      <!-- ===== Settings ===== -->
+      <details class="settings">
+        <summary>Settings</summary>
+        <h3>Keyboard Shortcuts</h3>
+        <p>Assign a single key. <strong>Key</strong> = +1 &nbsp;|&nbsp; <strong>Shift + Key</strong> = –1</p>
+        <table class="shortcut-table" id="shortcutTable">
+          <thead><tr><th>Cell</th><th>Key</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </details>
+
+      <!-- ===== Reference ===== -->
+      <p>📖 <a href="docs/Hematology_Reference_Ranges.pdf" target="_blank" rel="noopener">Reference ranges</a></p>
+
+      <!-- ===== Export ===== -->
+      <section class="export">
+        <h2>Export Results</h2>
+        <button id="copyTable" class="export-btn">Copy as Table</button>
+        <button id="copyParagraph" class="export-btn">Copy as Paragraph</button>
+      </section>
+    </main>
+
+    <!-- ===== Utility Sound ===== -->
+    <script>
+      function beep(){
+        try{
+          const ctx=new(window.AudioContext||window.webkitAudioContext)();
+          const osc=ctx.createOscillator();osc.type='sine';osc.frequency.value=880;osc.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.15);
+        }catch(e){}
+      }
+    </script>
+
+    <!-- ===== Core Script ===== -->
+    <script>
+      /* ---------- CONFIG ---------- */
+      const CELL_MAP={
+        neutrophils:{name:'Neutrophils',modes:['pb','bm'],myeloid:true},
+        lymphocytes:{name:'Lymphocytes',modes:['pb','bm'],excludeME:true},
+        monocytes:{name:'Monocytes',modes:['pb','bm'],excludeME:true},
+        eosinophils:{name:'Eosinophils',modes:['pb','bm'],myeloid:true},
+        basophils:{name:'Basophils',modes:['pb','bm'],myeloid:true},
+        metamyelocytes:{name:'Metamyelocytes',modes:['pb','bm'],myeloid:true},
+        myelocytes:{name:'Myelocytes',modes:['pb','bm'],myeloid:true},
+        promyelocytes:{name:'Promyelocytes',modes:['pb','bm'],myeloid:true},
+        nrbc:{name:'NRBCs',modes:['pb']},
+        erythroid:{name:'Erythroid Precursors',modes:['bm'],erythroid:true},
+        other:{name:'Other',modes:['pb','bm'],excludeME:true},
+        myeloblasts:{name:'Myeloblasts',modes:['bm'],myeloid:true},
+        plasmaCells:{name:'Plasma Cells',modes:['bm'],excludeME:true}
+      };
+
+      // PB grid (no blasts)
+      const PB_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','nrbc','other'];
+      // BM grid (erythroid before other)
+      const BM_CELLS=['neutrophils','lymphocytes','monocytes','eosinophils','basophils','metamyelocytes','myelocytes','promyelocytes','erythroid','other','myeloblasts','plasmaCells'];
+
+      const DEFAULT_SHORTCUTS={
+        neutrophils:'Q',lymphocytes:'W',monocytes:'E',eosinophils:'R',basophils:'T',
+        metamyelocytes:'A',myelocytes:'S',promyelocytes:'D',nrbc:'G',other:'H',
+        erythroid:'C',myeloblasts:'Z',plasmaCells:'X'
+      };
+
+      /* ---------- STATE ---------- */
+      const state={mode:'pb',totalCells:100,counts:{pb:{},bm:{}},shortcuts:{...DEFAULT_SHORTCUTS}};
+      PB_CELLS.forEach(id=>state.counts.pb[id]=0);
+      BM_CELLS.forEach(id=>state.counts.bm[id]=0);
+
+      /* ---------- HELPERS ---------- */
+      const el=id=>document.getElementById(id);
+      const pct=n=>Number.isFinite(n)?n.toFixed(1):'-';
+      const labelFor=id=>`${CELL_MAP[id].name}${state.shortcuts[id]?` (${state.shortcuts[id]})`:''}`;
+
+      function save(){localStorage.setItem('hematopathState',JSON.stringify(state));}
+      function load(){
+        try{
+          const d=JSON.parse(localStorage.getItem('hematopathState')||'null');
+          if(!d) return;
+          state.totalCells=d.totalCells||state.totalCells;
+          ['pb','bm'].forEach(m=>Object.keys(state.counts[m]).forEach(cid=>{
+            const v=d.counts?.[m]?.[cid];if(Number.isFinite(v)&&v>=0) state.counts[m][cid]=v;
+          }));
+          Object.keys(state.shortcuts).forEach(cid=>{const k=d.shortcuts?.[cid];if(k!==undefined) state.shortcuts[cid]=k;});
+        }catch(e){}
+      }
+
+      /* ---------- Build UI ---------- */
+      function buildGrid(panelId,ids){
+        const grid=el(panelId);grid.innerHTML='';
+        ids.forEach(id=>grid.insertAdjacentHTML('beforeend',
+          `<div class="cell-counter" data-cell="${id}">
+            <span class="cell-label">${labelFor(id)}</span>
+            <div class="btn-group">
+              <button class="minus">&ndash;</button><span class="count">${state.counts[state.mode][id]||0}</span><button class="plus">+</button>
+            </div>
+          </div>`));
+      }
+      function buildShortcutTable(){
+        const tbody=el('shortcutTable').querySelector('tbody');tbody.innerHTML='';
+        const all=[...new Set([...PB_CELLS,...BM_CELLS])];
+        all.forEach(id=>tbody.insertAdjacentHTML('beforeend',
+          `<tr><td>${CELL_MAP[id].name}</td><td><input class="shortcut-input" data-cell="${id}" value="${state.shortcuts[id]||''}" maxlength="1"></td></tr>`));
+      }
+      function updateLabels(){
+        document.querySelectorAll('.cell-counter .cell-label').forEach(lbl=>lbl.textContent=labelFor(lbl.parentElement.dataset.cell));
+      }
+      function refreshCounts(mode){
+        document.querySelectorAll(`#${mode==='pb'?'pb':'bm'}Grid .cell-counter`).forEach(div=>{
+          div.querySelector('.count').textContent=state.counts[mode][div.dataset.cell];
+        });
+      }
+
+      /* ---------- Calculations ---------- */
+      function updateTotals(){
+        const m=state.mode;const t=Object.values(state.counts[m]).reduce((a,b)=>a+b,0);const rem=state.totalCells-t;
+        el(m==='pb'?'pbTotal':'bmTotal').textContent=t;
+        el(m==='pb'?'pbRemaining':'bmRemaining').textContent=rem;
+        if(rem===0) beep();
+        if(m==='bm') calcME(); else calcTable();
+        save();
+      }
+      function calcME(){
+        const c=state.counts.bm;let my=0,er=0;
+        BM_CELLS.forEach(id=>{const cfg=CELL_MAP[id];if(cfg.myeloid)my+=c[id];if(cfg.erythroid)er+=c[id];});
+        el('meRatio').textContent=er?(my/er).toFixed(2):'-';
+      }
+      function calcTable(){
+        if(state.mode!=='pb') return;
+        const tbody=el('calcTable').querySelector('tbody');tbody.innerHTML='';
+        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const w=parseFloat(el('wbcCount').value)||0;
+        PB_CELLS.forEach(id=>{
+          const cnt=state.counts.pb[id];const rel=(cnt/total)*100;const abs=w*rel/100;
+          tbody.insertAdjacentHTML('beforeend',`<tr><td>${labelFor(id)}</td><td>${pct(rel)}</td><td>${abs.toFixed(2)}</td></tr>`);
+        });
+      }
+
+      /* ---------- Count Change ---------- */
+      function changeCount(id,delta){
+        const m=state.mode;const c=state.counts[m];const newVal=Math.max(0,c[id]+delta);
+        if(delta>0 && Object.values(c).reduce((a,b)=>a+b,0)>=state.totalCells) return;
+        if(newVal===c[id]) return;
+        c[id]=newVal;
+        document.querySelector(`.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`).textContent=newVal;
+        updateTotals();
+      }
+
+      /* ---------- Initialise UI ---------- */
+      load();
+      buildGrid('pbGrid',PB_CELLS);
+      buildGrid('bmGrid',BM_CELLS);
+      buildShortcutTable();
+      el('totalCells').value=state.totalCells;
+      updateLabels();
+      refreshCounts('pb');refreshCounts('bm');
+      calcTable();
+
+      /* ---------- Event Listeners ---------- */
+      document.addEventListener('click',e=>{
+        if(e.target.matches('.plus')) changeCount(e.target.closest('.cell-counter').dataset.cell,1);
+        else if(e.target.matches('.minus')) changeCount(e.target.closest('.cell-counter').dataset.cell,-1);
+        else if(e.target.id==='btnPB'||e.target.id==='btnBM'){
+          state.mode=e.target.id==='btnPB'?'pb':'bm';
+          btnPB.classList.toggle('active',state.mode==='pb');
+          btnBM.classList.toggle('active',state.mode==='bm');
+          pbPanel.classList.toggle('hidden',state.mode!=='pb');
+          bmPanel.classList.toggle('hidden',state.mode!=='bm');
+          calcPanel.classList.toggle('hidden',state.mode!=='pb');
+          updateTotals();
+        }else if(e.target.id==='resetBtn'){
+          Object.keys(state.counts[state.mode]).forEach(cid=>state.counts[state.mode][cid]=0);
+          refreshCounts(state.mode);
+          updateTotals();
+        }
+      });
+
+      el('totalCells').addEventListener('input',e=>{state.totalCells=parseInt(e.target.value)||1;updateTotals();});
+      el('wbcCount').addEventListener('input',calcTable);
+
+      // shortcut remap
+      document.addEventListener('input',e=>{
+        if(e.target.matches('.shortcut-input')){
+          const cid=e.target.dataset.cell;const val=e.target.value.toUpperCase();
+          // prevent duplicates
+          Object.keys(state.shortcuts).forEach(k=>{if(state.shortcuts[k]===val) state.shortcuts[k]='';});
+          state.shortcuts[cid]=val;
+          buildShortcutTable();
+          updateLabels();
+          calcTable();
+          save();
+        }
+      });
+
+      // keyboard shortcuts (+1 / -1)
+      document.addEventListener('keydown',e=>{
+        if(document.activeElement && document.activeElement.matches('input,textarea')) return;
+        const key=e.key.toUpperCase();
+        const cid=Object.keys(state.shortcuts).find(id=>state.shortcuts[id]===key);
+        if(!cid) return;
+        changeCount(cid,e.shiftKey?-1:1);
+        e.preventDefault();
+      });
+
+      /* ---------- Export ---------- */
+      function clip(txt){navigator.clipboard.writeText(txt).then(()=>alert('Copied!'));}
+      el('copyTable').addEventListener('click',()=>{
+        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const w=parseFloat(el('wbcCount').value)||0;let rows=['Cell\tRel %\tAbs (x10^3/µL)'];
+        PB_CELLS.forEach(id=>{const c=state.counts.pb[id];const r=(c/total*100).toFixed(1);const a=(w*r/100).toFixed(2);rows.push(`${CELL_MAP[id].name}\t${r}\t${a}`);});
+        clip(rows.join('\n'));
+      });
+      el('copyParagraph').addEventListener('click',()=>{
+        const total=Object.values(state.counts.pb).reduce((a,b)=>a+b,0)||1;const parts=[];
+        PB_CELLS.forEach(id=>{const c=state.counts.pb[id];if(c){const r=(c/total*100).toFixed(1);parts.push(`${c} ${CELL_MAP[id].name} (${r}%)`);}});
+        clip(parts.join(', '));
+      });
+    </script>
+  </body>
+</html>
