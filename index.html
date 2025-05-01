@@ -305,6 +305,22 @@
         </p>
       </section>
 
+      <!-- ===== BM Calculations ===== -->
+      <details id="bmCalcPanel" class="hidden">
+        <summary>Bone Marrow Differential Calculations (Relative % &amp; Ref Range)</summary>
+        <table id="bmCalcTable">
+          <thead>
+            <tr>
+              <th>Cell</th>
+              <th>Count (#)</th>
+              <th>Relative %</th>
+              <th>Ref Range (%)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </details>
+
       <!-- ===== PB Calculations ===== -->
       <details id="calcPanel" open>
         <summary>
@@ -480,7 +496,7 @@
         plasmaCells: 'X'
       };
 
-      /* Reference ranges for PB differential by fractional age in years */
+      /* Reference ranges for PB differential by age */
       function getRefRange(id, ageInYears) {
         const ranges = {
           neutrophils: [
@@ -502,7 +518,7 @@
           monocytes: [{ max: 150, range: '0.2-0.8' }],
           eosinophils: [{ max: 150, range: '0–0.3' }],
           basophils: [{ max: 150, range: '0–0.1' }]
-                 };
+        };
         const cellRanges = ranges[id];
         if (!cellRanges) return '-';
         for (const r of cellRanges) {
@@ -510,6 +526,23 @@
         }
         return '-';
       }
+
+      /* Reference ranges for BM differential */
+      const BM_REF_RANGES = {
+        promyelocytes: '1–8',
+        myelocytes: '8–15',
+        metamyelocytes: '8–18',
+        neutrophils: '12–25',
+        eosinophils: '1–5',
+        basophils: '0–1',
+        monocytes: '0–2',
+        promyelocytes: '1–8',
+        myeloblasts: '0–3',     // you may alias if you call them differently
+        erythroid: '0–2',
+        other: '15–25',
+        lymphocytes: '10–15',
+        plasmaCells: '0–1'
+      };
 
       /* ---------- STATE ---------- */
       const state = {
@@ -588,7 +621,9 @@
       function updateLabels() {
         document
           .querySelectorAll('.cell-counter .cell-label')
-          .forEach((lbl) => (lbl.textContent = labelFor(lbl.parentElement.dataset.cell)));
+          .forEach((lbl) =>
+            (lbl.textContent = labelFor(lbl.parentElement.dataset.cell))
+          );
       }
       function refreshCounts(mode) {
         document
@@ -602,16 +637,25 @@
       /* ---------- CALCULATIONS ---------- */
       function updateTotals() {
         const m = state.mode;
-const t = Object.entries(state.counts[m])
-  .reduce((sum, [cid, cnt]) => cid === 'nrbc' ? sum : sum + cnt, 0);
+        // sum non-NRBC for both pb & bm
+        const t = Object.entries(state.counts[m]).reduce(
+          (sum, [cid, cnt]) => (cid === 'nrbc' ? sum : sum + cnt),
+          0
+        );
         const rem = state.totalCells - t;
         el(m === 'pb' ? 'pbTotal' : 'bmTotal').textContent = t;
         el(m === 'pb' ? 'pbRemaining' : 'bmRemaining').textContent = rem;
         if (rem === 0) beep();
-        if (m === 'bm') calcME();
-        else calcTable();
+
+        if (m === 'bm') {
+          calcME();
+          calcBM();
+        } else {
+          calcTable();
+        }
         save();
       }
+
       function calcME() {
         const c = state.counts.bm;
         let my = 0,
@@ -623,12 +667,38 @@ const t = Object.entries(state.counts[m])
         });
         el('meRatio').textContent = er ? (my / er).toFixed(2) : '-';
       }
+
+      function calcBM() {
+        if (state.mode !== 'bm') return;
+        const tbody = el('bmCalcTable').querySelector('tbody');
+        tbody.innerHTML = '';
+        // re-compute total
+        const total = BM_CELLS.reduce(
+          (sum, id) => sum + (state.counts.bm[id] || 0),
+          0
+        ) || 1;
+        BM_CELLS.forEach((id) => {
+          const cnt = state.counts.bm[id];
+          const rel = ((cnt / total) * 100).toFixed(1);
+          const ref = BM_REF_RANGES[id] || '-';
+          tbody.insertAdjacentHTML(
+            'beforeend',
+            `<tr>
+              <td>${CELL_MAP[id].name}</td>
+              <td>${cnt}</td>
+              <td>${rel}%</td>
+              <td>${ref}</td>
+            </tr>`
+          );
+        });
+      }
+
       function calcTable() {
         if (state.mode !== 'pb') return;
         const tbody = el('calcTable').querySelector('tbody');
         tbody.innerHTML = '';
 
-        // compute fractional age in years
+        // age in years
         const yrs = parseInt(el('ageYears').value) || 0;
         const mos = parseInt(el('ageMonths').value) || 0;
         const dys = parseInt(el('ageDays').value) || 0;
@@ -641,7 +711,6 @@ const t = Object.entries(state.counts[m])
             0
           ) || 1;
 
-        // hide absolutes for these
         const hideAbs = [
           'metamyelocytes',
           'myelocytes',
@@ -651,29 +720,22 @@ const t = Object.entries(state.counts[m])
 
         PB_CELLS.forEach((id) => {
           const cnt = state.counts.pb[id];
-const isNRBC = id === 'nrbc';
-
-  if (isNRBC) {
-    // only render the Cell and Count columns, skip Relative/Absolute
-    tbody.insertAdjacentHTML('beforeend', `
-      <tr>
-        <td>${labelFor(id)}</td>
-        <td>${cnt}</td>
-        <td colspan="2"></td>   <!-- empty cells in place of Rel% and Abs -->
-        <td>-</td>
-      </tr>`);
-    return;
-  }
-
-          const rel = (cnt / totalLeuks) * 100;
-
-          let absDisplay;
-          if (hideAbs.includes(id)) {
-            absDisplay = '-';
-          } else {
-            const a = (w * rel) / 100;
-            absDisplay = a.toFixed(1);
+          if (id === 'nrbc') {
+            tbody.insertAdjacentHTML(
+              'beforeend',
+              `<tr>
+                <td>${labelFor(id)}</td>
+                <td>${cnt}</td>
+                <td colspan="2"></td>
+                <td>-</td>
+              </tr>`
+            );
+            return;
           }
+          const rel = (cnt / totalLeuks) * 100;
+          let absDisplay = hideAbs.includes(id)
+            ? '-'
+            : ((w * rel) / 100).toFixed(1);
           const ref = getRefRange(id, age);
           tbody.insertAdjacentHTML(
             'beforeend',
@@ -689,27 +751,26 @@ const isNRBC = id === 'nrbc';
       }
 
       /* ---------- COUNT HANDLING ---------- */
-function changeCount(id, delta) {
-  const m = state.mode;
-  const c = state.counts[m];
+      function changeCount(id, delta) {
+        const m = state.mode;
+        const c = state.counts[m];
+        const leukTotal = Object.entries(c).reduce(
+          (sum, [cid, cnt]) => (cid === 'nrbc' ? sum : sum + cnt),
+          0
+        );
+        if (delta > 0 && id !== 'nrbc' && leukTotal >= state.totalCells)
+          return;
 
-  // sum only non‐NRBC cells for the count‐limit guard
-  const leukTotal = Object.entries(c)
-    .reduce((sum, [cid, cnt]) => cid === 'nrbc' ? sum : sum + cnt, 0);
-  // only block additions to non‐NRBC when totalCells reached
-  if (delta > 0 && id !== 'nrbc' && leukTotal >= state.totalCells) return;
-
-  const newVal = Math.max(0, c[id] + delta);
-  if (newVal === c[id]) return;
-
-  c[id] = newVal;
-  document.querySelector(
-    `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
-  ).textContent = newVal;
-
-  updateTotals();
-}
-
+        const newVal = Math.max(0, c[id] + delta);
+        if (newVal === c[id]) return;
+        c[id] = newVal;
+        document
+          .querySelector(
+            `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
+          )
+          .textContent = newVal;
+        updateTotals();
+      }
 
       /* ---------- INIT & EVENTS ---------- */
       load();
@@ -720,7 +781,7 @@ function changeCount(id, delta) {
       updateLabels();
       refreshCounts('pb');
       refreshCounts('bm');
-      calcTable();
+      calcTable(); // initial PB
 
       document.addEventListener('click', (e) => {
         if (e.target.matches('.plus'))
@@ -734,6 +795,7 @@ function changeCount(id, delta) {
           pbPanel.classList.toggle('hidden', state.mode !== 'pb');
           bmPanel.classList.toggle('hidden', state.mode !== 'bm');
           calcPanel.classList.toggle('hidden', state.mode !== 'pb');
+          bmCalcPanel.classList.toggle('hidden', state.mode !== 'bm');
           updateTotals();
         } else if (e.target.id === 'resetBtn') {
           Object.keys(state.counts[state.mode]).forEach(
@@ -787,57 +849,94 @@ function changeCount(id, delta) {
       function clip(txt) {
         navigator.clipboard.writeText(txt).then(() => alert('Copied!'));
       }
-      el('copyTable').addEventListener('click', () => {
-        const yrs = parseInt(el('ageYears').value) || 0;
-        const mos = parseInt(el('ageMonths').value) || 0;
-        const dys = parseInt(el('ageDays').value) || 0;
-        const age = yrs + mos / 12 + dys / 365;
 
-        const total =
-          Object.entries(state.counts.pb).reduce(
-            (sum, [id, count]) => (id === 'nrbc' ? sum : sum + count),
+      el('copyTable').addEventListener('click', () => {
+        if (state.mode === 'bm') {
+          // BM table export
+          const total = BM_CELLS.reduce(
+            (sum, id) => sum + state.counts.bm[id],
             0
           ) || 1;
-        const w = parseFloat(el('wbcCount').value) || 0;
+          const rows = ['Cell\tRelative %\tRef Range'];
+          BM_CELLS.forEach((id) => {
+            const c = state.counts.bm[id];
+            const r = ((c / total) * 100).toFixed(1);
+            const ref = BM_REF_RANGES[id] || '-';
+            rows.push(`${CELL_MAP[id].name}\t${r}\t${ref}`);
+          });
+          clip(rows.join('\n'));
+        } else {
+          // PB table export
+          const yrs = parseInt(el('ageYears').value) || 0;
+          const mos = parseInt(el('ageMonths').value) || 0;
+          const dys = parseInt(el('ageDays').value) || 0;
+          const age = yrs + mos / 12 + dys / 365;
+          const totalPB =
+            Object.entries(state.counts.pb).reduce(
+              (sum, [id, count]) =>
+                id === 'nrbc' ? sum : sum + count,
+              0
+            ) || 1;
+          const w = parseFloat(el('wbcCount').value) || 0;
 
-        const rows = [
-          'Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range'
-        ];
-        PB_CELLS.forEach((id) => {
-          if (id === 'nrbc') return;
-          const c = state.counts.pb[id];
-          const r = ((c / total) * 100).toFixed(1);
-          const a = ((w * r) / 100).toFixed(1);
-          const ref = getRefRange(id, age);
-          rows.push(`${CELL_MAP[id].name}\t${r}\t${a}\t${ref}`);
-        });
-        clip(rows.join('\n'));
+          const rows = ['Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range'];
+          PB_CELLS.forEach((id) => {
+            if (id === 'nrbc') return;
+            const c = state.counts.pb[id];
+            const r = ((c / totalPB) * 100).toFixed(1);
+            const a = ((w * r) / 100).toFixed(1);
+            const ref = getRefRange(id, age);
+            rows.push(`${CELL_MAP[id].name}\t${r}\t${a}\t${ref}`);
+          });
+          clip(rows.join('\n'));
+        }
       });
 
       el('copyParagraph').addEventListener('click', () => {
-        const yrs = parseInt(el('ageYears').value) || 0;
-        const mos = parseInt(el('ageMonths').value) || 0;
-        const dys = parseInt(el('ageDays').value) || 0;
-        const age = yrs + mos / 12 + dys / 365;
-
-        const total =
-          Object.entries(state.counts.pb).reduce(
-            (sum, [id, count]) => (id === 'nrbc' ? sum : sum + count),
+        if (state.mode === 'bm') {
+          // BM paragraph export
+          const total = BM_CELLS.reduce(
+            (sum, id) => sum + state.counts.bm[id],
             0
           ) || 1;
-        const parts = [];
-        PB_CELLS.forEach((id) => {
-          if (id === 'nrbc') return;
-          const c = state.counts.pb[id];
-          if (c) {
-            const r = ((c / total) * 100).toFixed(1);
-            const ref = getRefRange(id, age);
-            parts.push(
-              `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`
-            );
-          }
-        });
-        clip(parts.join(', '));
+          const parts = [];
+          BM_CELLS.forEach((id) => {
+            const c = state.counts.bm[id];
+            if (c) {
+              const r = ((c / total) * 100).toFixed(1);
+              const ref = BM_REF_RANGES[id] || '-';
+              parts.push(
+                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`
+              );
+            }
+          });
+          clip(parts.join(', '));
+        } else {
+          // PB paragraph export
+          const yrs = parseInt(el('ageYears').value) || 0;
+          const mos = parseInt(el('ageMonths').value) || 0;
+          const dys = parseInt(el('ageDays').value) || 0;
+          const age = yrs + mos / 12 + dys / 365;
+          const totalPB =
+            Object.entries(state.counts.pb).reduce(
+              (sum, [id, count]) =>
+                id === 'nrbc' ? sum : sum + count,
+              0
+            ) || 1;
+          const parts = [];
+          PB_CELLS.forEach((id) => {
+            if (id === 'nrbc') return;
+            const c = state.counts.pb[id];
+            if (c) {
+              const r = ((c / totalPB) * 100).toFixed(1);
+              const ref = getRefRange(id, age);
+              parts.push(
+                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`
+              );
+            }
+          });
+          clip(parts.join(', '));
+        }
       });
     </script>
   </body>
