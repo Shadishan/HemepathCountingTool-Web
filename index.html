@@ -325,9 +325,10 @@
           <thead>
             <tr>
               <th>Cell</th>
+              <th>Count (#)</th>
               <th>Relative %</th>
               <th>Absolute (×10³/µL)</th>
-              <th>Ref Range</th>
+              <th>Ref Range (×10³/µL)</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -665,6 +666,7 @@ const t = Object.entries(state.counts[m]).reduce((sum, [id, count]) =>
             'beforeend',
             `<tr>
               <td>${labelFor(id)}</td>
+              <td>${cnt}</td>
               <td>${pct(rel)}%</td>
               <td>${absDisplay}</td>
               <td>${ref}</td>
