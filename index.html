@@ -870,6 +870,13 @@ document.addEventListener('keydown', e => {
     key = e.key.toUpperCase(); // fallback for other symbols
   }
 
+  const cid = Object.keys(state.shortcuts)
+                    .find(id => state.shortcuts[id] === key);
+  if (!cid) return;
+
+  changeCount(cid, e.shiftKey ? -1 : 1);
+  e.preventDefault();
+});
 
       /* ---------- EXPORT ---------- */
       function clip(txt) {
