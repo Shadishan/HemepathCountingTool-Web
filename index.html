@@ -48,22 +48,19 @@
       }
 
       /* ─── Controls ─── */
-.controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;      /* center all rows horizontally */
-  gap: 0.5rem;
-}
-
-.control-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;  /* center items within each row */
-  gap: 0.5rem;
-  width: 100%;              /* optional: makes each row span full width */
-}
-
-
+      .controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .control-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+      }
       .control-label {
         font-weight: 600;
       }
@@ -179,6 +176,13 @@
         text-align: center;
       }
 
+      /* ─── NRBC per 100 display ─── */
+      .nrbc-per100 {
+        font-weight: 600;
+        margin-top: 0.5rem;
+        text-align: center;
+      }
+
       /* ─── Shortcuts table ─── */
       .shortcut-table {
         width: 100%;
@@ -233,67 +237,60 @@
     <main class="container">
       <!-- ===== Controls ===== -->
       <section class="controls">
-  <!-- Row 1: Total cells -->
-  <div class="control-row">
-    <label for="totalCells" class="control-label">
-      Total cells to count:
-    </label>
-    <input type="number" id="totalCells" min="1" value="100" />
-  </div>
-
-  <!-- Row 2: Age -->
-  <div class="control-row">
-    <label class="control-label">Age:</label>
-    <input
-      type="number"
-      id="ageYears"
-      min="0"
-      step="1"
-      value="16"
-      title="Years"
-    />
-    <span>yr</span>
-
-    <input
-      type="number"
-      id="ageMonths"
-      min="0"
-      max="11"
-      step="1"
-      value="0"
-      title="Months"
-    />
-    <span>mo</span>
-
-    <div class="age-group">
-      <input
-        type="number"
-        id="ageDays"
-        min="0"
-        max="30"
-        step="1"
-        value="0"
-        title="Days"
-      />
-      <span>d</span>
-    </div>
-  </div>
-
-  <!-- Row 3: Tab buttons + Reset -->
-  <div class="control-row">
-    <div class="view-toggle" role="tablist">
-      <button id="btnPB" class="toggle active" role="tab" aria-selected="true">
-        Peripheral Blood
-      </button>
-      <button id="btnBM" class="toggle" role="tab" aria-selected="false">
-        Bone Marrow
-      </button>
-    </div>
-    <button id="resetBtn" class="toggle reset" title="Reset counts">
-      Reset
-    </button>
-  </div>
-</section>
+        <div class="control-row">
+          <label for="totalCells" class="control-label">
+            Total cells to count:
+          </label>
+          <input type="number" id="totalCells" min="1" value="100" />
+        </div>
+        <div class="control-row">
+          <label class="control-label">Age:</label>
+          <input
+            type="number"
+            id="ageYears"
+            min="0"
+            step="1"
+            value="16"
+            title="Years"
+          />
+          <span>yr</span>
+          <input
+            type="number"
+            id="ageMonths"
+            min="0"
+            max="11"
+            step="1"
+            value="0"
+            title="Months"
+          />
+          <span>mo</span>
+          <div class="age-group">
+            <input
+              type="number"
+              id="ageDays"
+              min="0"
+              max="30"
+              step="1"
+              value="0"
+              title="Days"
+            />
+            <span>d</span>
+          </div>
+        </div>
+        <div class="control-row">
+          <div class="view-toggle" role="tablist">
+            <button id="btnPB" class="toggle active" role="tab" aria-selected="true">
+              Peripheral Blood
+            </button>
+            <button id="btnBM" class="toggle" role="tab" aria-selected="false">
+              Bone Marrow
+            </button>
+          </div>
+          <button id="resetBtn" class="toggle reset" title="Reset counts">
+            Reset
+          </button>
+        </div>
+      </section>
 
       <!-- ===== Peripheral Blood Panel ===== -->
       <section id="pbPanel" class="panel" aria-labelledby="btnPB">
@@ -360,6 +357,9 @@
           </thead>
           <tbody></tbody>
         </table>
+        <p class="nrbc-per100">
+          NRBCs per 100 leukocytes: <span id="nrbcPer100">0.0</span>
+        </p>
       </details>
 
       <!-- ===== Settings ===== -->
@@ -548,7 +548,7 @@
         basophils: '0–1',
         monocytes: '0–2',
         promyelocytes: '1–8',
-        myeloblasts: '0–3',     // you may alias if you call them differently
+        myeloblasts: '0–3',
         erythroid: '15-25',
         other: '15–25',
         lymphocytes: '10–15',
@@ -664,6 +664,7 @@
           calcBM();
         } else {
           calcTable();
+          updateNRBC();
         }
         save();
       }
@@ -762,6 +763,18 @@
         });
       }
 
+      function updateNRBC() {
+        if (state.mode !== 'pb') return;
+        const c = state.counts.pb['nrbc'];
+        const totalLeuks =
+          Object.entries(state.counts.pb).reduce(
+            (sum, [id, count]) => (id === 'nrbc' ? sum : sum + count),
+            0
+          ) || 1;
+        const per100 = (c / totalLeuks) * 100;
+        el('nrbcPer100').textContent = per100.toFixed(1);
+      }
+
       /* ---------- COUNT HANDLING ---------- */
       function changeCount(id, delta) {
         const m = state.mode;
@@ -794,6 +807,7 @@
       refreshCounts('pb');
       refreshCounts('bm');
       calcTable(); // initial PB
+      updateNRBC();
 
       document.addEventListener('click', (e) => {
         if (e.target.matches('.plus'))
@@ -900,6 +914,10 @@
             const ref = getRefRange(id, age);
             rows.push(`${CELL_MAP[id].name}\t${r}\t${a}\t${ref}`);
           });
+          // add NRBCs per 100 leukocytes
+          const nrCount = state.counts.pb['nrbc'];
+          const nrPer100 = ((nrCount / totalPB) * 100).toFixed(1);
+          rows.push(`NRBCs per 100 leukocytes\t${nrPer100}`);
           clip(rows.join('\n'));
         }
       });
@@ -935,6 +953,7 @@
                 id === 'nrbc' ? sum : sum + count,
               0
             ) || 1;
+
           const parts = [];
           PB_CELLS.forEach((id) => {
             if (id === 'nrbc') return;
@@ -947,6 +966,10 @@
               );
             }
           });
+          // add NRBCs per 100 leukocytes
+          const nrCount = state.counts.pb['nrbc'];
+          const nrPer100 = ((nrCount / totalPB) * 100).toFixed(1);
+          parts.push(`${nrPer100} NRBCs per 100 leukocytes`);
           clip(parts.join(', '));
         }
       });
