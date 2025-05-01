@@ -777,26 +777,39 @@
       }
 
       /* ---------- COUNT HANDLING ---------- */
-      function changeCount(id, delta) {
-        const m = state.mode;
-        const c = state.counts[m];
-        const leukTotal = Object.entries(c).reduce(
-          (sum, [cid, cnt]) => (cid === 'nrbc' ? sum : sum + cnt),
-          0
-        );
-        if (delta > 0 && id !== 'nrbc' && leukTotal >= state.totalCells)
-          return;
+ function changeCount(id, delta) {
+  const m = state.mode;
+  const c = state.counts[m];
 
-        const newVal = Math.max(0, c[id] + delta);
-        if (newVal === c[id]) return;
-        c[id] = newVal;
-        document
-          .querySelector(
-            `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
-          )
-          .textContent = newVal;
-        updateTotals();
-      }
+  // total of all non-NRBCs
+  const leukTotal = Object.entries(c).reduce(
+    (sum, [cid, cnt]) => (cid === 'nrbc' ? sum : sum + cnt),
+    0
+  );
+
+  // 1) block +1 if it would push you over the total
+  if (delta > 0 && id !== 'nrbc' && leukTotal + delta > state.totalCells) {
+    return;
+  }
+
+  // 2) block –1 if that cell is already zero
+  if (delta < 0 && c[id] + delta < 0) {
+    return;
+  }
+
+  // 3) apply the change
+  c[id] += delta;
+
+  // 4) update the UI
+  document
+    .querySelector(
+      `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
+    )
+    .textContent = c[id];
+
+  updateTotals();
+}
+
 
       /* ---------- INIT & EVENTS ---------- */
       load();
@@ -857,26 +870,36 @@
         }
       });
 
-  // for digits, e.code is always "Digit0"…"Digit9"
-  // for letters it's "KeyA"…"KeyZ", so let's normalize both:
 document.addEventListener('keydown', e => {
+  // don’t steal focus when typing into inputs
   if (document.activeElement.matches('input,textarea')) return;
-  let key = '';
-  if (e.code.startsWith('Digit')) {
-    key = e.code.slice(5);  // "1"…"9","0"
-  } else if (e.code.startsWith('Key')) {
-    key = e.code.slice(3);  // "A"…"Z"
-  } else {
-    key = e.key.toUpperCase(); // fallback for other symbols
+
+  // 1) Figure out what “logical key” you pressed:
+  let key;
+  // a) Any number key? (Digit0–9 or Numpad0–9)
+  if (/^(Digit|Numpad)\d$/.test(e.code)) {
+    // strip off “Digit” or “Numpad” → you get “0”–“9”
+    key = e.code.replace(/^(?:Digit|Numpad)/, '');
+  }
+  // b) Any letter key? (KeyA–KeyZ)
+  else if (/^Key[A-Z]$/.test(e.code)) {
+    key = e.code.slice(3);           // “KeyA” → “A”
+  }
+  // c) Not a digit or letter? Bail out.
+  else {
+    return;
   }
 
+  // 2) Find which cell that maps to
   const cid = Object.keys(state.shortcuts)
                     .find(id => state.shortcuts[id] === key);
   if (!cid) return;
 
-  changeCount(cid, e.shiftKey ? -1 : 1);
+  // 3) Prevent the browser’s own page-scroll nav, then update
   e.preventDefault();
+  changeCount(cid, e.shiftKey ? -1 : 1);
 });
+
 
       /* ---------- EXPORT ---------- */
       function clip(txt) {
