@@ -602,9 +602,8 @@
       /* ---------- CALCULATIONS ---------- */
       function updateTotals() {
         const m = state.mode;
-const t = Object.entries(state.counts[m]).reduce((sum, [id, count]) =>
-  id === 'nrbc' ? sum : sum + count
-, 0);
+const t = Object.entries(state.counts[m])
+  .reduce((sum, [cid, cnt]) => cid === 'nrbc' ? sum : sum + cnt, 0);
         const rem = state.totalCells - t;
         el(m === 'pb' ? 'pbTotal' : 'bmTotal').textContent = t;
         el(m === 'pb' ? 'pbRemaining' : 'bmRemaining').textContent = rem;
@@ -651,9 +650,23 @@ const t = Object.entries(state.counts[m]).reduce((sum, [id, count]) =>
         ];
 
         PB_CELLS.forEach((id) => {
-          if (id === 'nrbc') return;
           const cnt = state.counts.pb[id];
+const isNRBC = id === 'nrbc';
+
+  if (isNRBC) {
+    // only render the Cell and Count columns, skip Relative/Absolute
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${labelFor(id)}</td>
+        <td>${cnt}</td>
+        <td colspan="2"></td>   <!-- empty cells in place of Rel% and Abs -->
+        <td>-</td>
+      </tr>`);
+    return;
+  }
+
           const rel = (cnt / totalLeuks) * 100;
+
           let absDisplay;
           if (hideAbs.includes(id)) {
             absDisplay = '-';
@@ -676,22 +689,27 @@ const t = Object.entries(state.counts[m]).reduce((sum, [id, count]) =>
       }
 
       /* ---------- COUNT HANDLING ---------- */
-      function changeCount(id, delta) {
-        const m = state.mode;
-        const c = state.counts[m];
-        const newVal = Math.max(0, c[id] + delta);
-        if (
-          delta > 0 &&
-          Object.values(c).reduce((a, b) => a + b, 0) >= state.totalCells
-        )
-          return;
-        if (newVal === c[id]) return;
-        c[id] = newVal;
-        document.querySelector(
-          `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
-        ).textContent = newVal;
-        updateTotals();
-      }
+function changeCount(id, delta) {
+  const m = state.mode;
+  const c = state.counts[m];
+
+  // sum only non‐NRBC cells for the count‐limit guard
+  const leukTotal = Object.entries(c)
+    .reduce((sum, [cid, cnt]) => cid === 'nrbc' ? sum : sum + cnt, 0);
+  // only block additions to non‐NRBC when totalCells reached
+  if (delta > 0 && id !== 'nrbc' && leukTotal >= state.totalCells) return;
+
+  const newVal = Math.max(0, c[id] + delta);
+  if (newVal === c[id]) return;
+
+  c[id] = newVal;
+  document.querySelector(
+    `.panel:not(.hidden) .cell-counter[data-cell="${id}"] .count`
+  ).textContent = newVal;
+
+  updateTotals();
+}
+
 
       /* ---------- INIT & EVENTS ---------- */
       load();
@@ -783,7 +801,7 @@ const t = Object.entries(state.counts[m]).reduce((sum, [id, count]) =>
         const w = parseFloat(el('wbcCount').value) || 0;
 
         const rows = [
-          'Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range'
+const rows = ['Cell\tCount (#)\tRelative %\tAbsolute (×10³/µL)\tRef Range'];
         ];
         PB_CELLS.forEach((id) => {
           if (id === 'nrbc') return;
