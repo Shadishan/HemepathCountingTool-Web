@@ -48,14 +48,22 @@
       }
 
       /* ─── Controls ─── */
-      .controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1rem;
-      }
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;      /* center all rows horizontally */
+  gap: 0.5rem;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;  /* center items within each row */
+  gap: 0.5rem;
+  width: 100%;              /* optional: makes each row span full width */
+}
+
+
       .control-label {
         font-weight: 600;
       }
@@ -225,64 +233,67 @@
     <main class="container">
       <!-- ===== Controls ===== -->
       <section class="controls">
-        <label for="totalCells" class="control-label"
-          >Total cells to count:</label
-        >
-        <input type="number" id="totalCells" min="1" value="100" />
+  <!-- Row 1: Total cells -->
+  <div class="control-row">
+    <label for="totalCells" class="control-label">
+      Total cells to count:
+    </label>
+    <input type="number" id="totalCells" min="1" value="100" />
+  </div>
 
-        <label class="control-label">Age:</label>
-        <input
-          type="number"
-          id="ageYears"
-          min="0"
-          step="1"
-          value="16"
-          title="Years"
-        />
-        <span>yr</span>
-        <input
-          type="number"
-          id="ageMonths"
-          min="0"
-          max="11"
-          step="1"
-          value="0"
-          title="Months"
-        />
-        <span>mo</span>
-        <input
-          type="number"
-          id="ageDays"
-          min="0"
-          max="30"
-          step="1"
-          value="0"
-          title="Days"
-        />
-        <span>d</span>
+  <!-- Row 2: Age -->
+  <div class="control-row">
+    <label class="control-label">Age:</label>
+    <input
+      type="number"
+      id="ageYears"
+      min="0"
+      step="1"
+      value="16"
+      title="Years"
+    />
+    <span>yr</span>
 
-        <div class="view-toggle" role="tablist">
-          <button
-            id="btnPB"
-            class="toggle active"
-            role="tab"
-            aria-selected="true"
-          >
-            Peripheral Blood
-          </button>
-          <button
-            id="btnBM"
-            class="toggle"
-            role="tab"
-            aria-selected="false"
-          >
-            Bone Marrow
-          </button>
-        </div>
-        <button id="resetBtn" class="toggle reset" title="Reset counts">
-          Reset
-        </button>
-      </section>
+    <input
+      type="number"
+      id="ageMonths"
+      min="0"
+      max="11"
+      step="1"
+      value="0"
+      title="Months"
+    />
+    <span>mo</span>
+
+    <div class="age-group">
+      <input
+        type="number"
+        id="ageDays"
+        min="0"
+        max="30"
+        step="1"
+        value="0"
+        title="Days"
+      />
+      <span>d</span>
+    </div>
+  </div>
+
+  <!-- Row 3: Tab buttons + Reset -->
+  <div class="control-row">
+    <div class="view-toggle" role="tablist">
+      <button id="btnPB" class="toggle active" role="tab" aria-selected="true">
+        Peripheral Blood
+      </button>
+      <button id="btnBM" class="toggle" role="tab" aria-selected="false">
+        Bone Marrow
+      </button>
+    </div>
+    <button id="resetBtn" class="toggle reset" title="Reset counts">
+      Reset
+    </button>
+  </div>
+</section>
 
       <!-- ===== Peripheral Blood Panel ===== -->
       <section id="pbPanel" class="panel" aria-labelledby="btnPB">
