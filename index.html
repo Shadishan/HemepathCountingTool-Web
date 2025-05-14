@@ -33,7 +33,8 @@
         align-items: center;
       }
       .logo {
-        max-height: 46px;
+        max-height: 100px;
+        width: auto;
         object-fit: contain;
       }
       .app-title {
@@ -231,6 +232,7 @@
           class="logo"
         />
       </div>-->
+      <div class="logo-wrap"><img src = "images/wbc_icon.png" alt="WBC Log" class="logo"/></div>
       <h1 class="app-title">Hematopathology Counting Tool</h1>
     </header>
 
@@ -927,21 +929,28 @@ document.addEventListener('keydown', e => {
           const mos = parseInt(el('ageMonths').value) || 0;
           const dys = parseInt(el('ageDays').value) || 0;
           const age = yrs + mos / 12 + dys / 365;
-          const totalPB =
-            Object.entries(state.counts.pb).reduce(
-              (sum, [id, count]) =>
-                id === 'nrbc' ? sum : sum + count,
-              0
-            ) || 1;
+          const totalPB = Object.entries(state.counts.pb)
+                              .reduce((sum, [id, count]) =>
+                                id === 'nrbc' ? sum : sum + count,
+                                  0) || 1;
           const w = parseFloat(el('wbcCount').value) || 0;
 
-          const rows = ['Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range'];
+          const HIDE_IDS = ['metamyelocytes','myelocytes','promyelocytes','blasts', 'other'];
+          const rows = ['Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range (×10³/µL)'];
+          
           PB_CELLS.forEach((id) => {
             if (id === 'nrbc') return;
             const c = state.counts.pb[id];
+            if (c === 0 && !HIDE_IDS.includes(id)) return;
             const r = ((c / totalPB) * 100).toFixed(1);
-            const a = ((w * r) / 100).toFixed(1);
-            const ref = getRefRange(id, age);
+            let a, ref;
+            if (HIDE_IDS.includes(id)) {
+              a   = '-';
+              ref = '-';
+            } else {
+              a   = ((w * r / 100).toFixed(1));
+              ref = getRefRange(id, age);
+            }
             rows.push(`${CELL_MAP[id].name}\t${r}\t${a}\t${ref}`);
           });
           // add NRBCs per 100 leukocytes
@@ -966,7 +975,7 @@ document.addEventListener('keydown', e => {
               const r = ((c / total) * 100).toFixed(1);
               const ref = BM_REF_RANGES[id] || '-';
               parts.push(
-                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`
+                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref}%)`
               );
             }
           });
@@ -983,16 +992,19 @@ document.addEventListener('keydown', e => {
                 id === 'nrbc' ? sum : sum + count,
               0
             ) || 1;
+          const w = parseFloat(el('wbcCount').value) || 0;
 
+          const HIDE_IDS = ['metamyelocytes','myelocytes','promyelocytes','blasts', 'other'];
           const parts = [];
           PB_CELLS.forEach((id) => {
             if (id === 'nrbc') return;
             const c = state.counts.pb[id];
             if (c) {
               const r = ((c / totalPB) * 100).toFixed(1);
+              const a   = ((w * r / 100).toFixed(1));
               const ref = getRefRange(id, age);
               parts.push(
-                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref})`
+                `${c} ${CELL_MAP[id].name} (rel: ${r}%, abs: ${a} (×10³/µL), ref ${ref}(×10³/µL))`
               );
             }
           });
