@@ -908,21 +908,37 @@ document.addEventListener('keydown', e => {
         navigator.clipboard.writeText(txt).then(() => alert('Copied!'));
       }
 
+      const REQUIRED_IDS = ['neutrophils','lymphocytes','monocytes','eosinophils','basophils'];
+      const BM_MYELOID_IDS = [
+        'neutrophils','eosinophils','basophils',
+        'monocytes','metamyelocytes','myelocytes',
+        'promyelocytes','blasts','other'
+      ];
+
       el('copyTable').addEventListener('click', () => {
         if (state.mode === 'bm') {
+
           // BM table export
-          const total = BM_CELLS.reduce(
-            (sum, id) => sum + state.counts.bm[id],
-            0
-          ) || 1;
+          const total = BM_CELLS.reduce((sum, id) => sum + state.counts.bm[id], 0) || 1;
           const rows = ['Cell\tRelative %\tRef Range'];
           BM_CELLS.forEach((id) => {
             const c = state.counts.bm[id];
-            const r = ((c / total) * 100).toFixed(1);
+            // skip zero-counts UNLESS this is one of the core five
+            if (c === 0 && !REQUIRED_IDS.includes(id)) return;
+            const r   = ((c / total) * 100).toFixed(1);
             const ref = BM_REF_RANGES[id] || '-';
             rows.push(`${CELL_MAP[id].name}\t${r}\t${ref}`);
           });
+
+          /* ---- M : E ratio ---- */
+          const myeloid  = BM_MYELOID_IDS
+                            .reduce((sum, id) => sum + state.counts.bm[id], 0);
+          const erythroid = state.counts.bm['erythroid'] || 0;
+
+          const meRatio = erythroid ? (myeloid / erythroid).toFixed(1) : '—';
+          rows.push(`M:E ratio\t${meRatio}`);
           clip(rows.join('\n'));
+
         } else {
           // PB table export
           const yrs = parseInt(el('ageYears').value) || 0;
@@ -936,7 +952,6 @@ document.addEventListener('keydown', e => {
           const w = parseFloat(el('wbcCount').value) || 0;
 
           const HIDE_IDS = ['metamyelocytes','myelocytes','promyelocytes','blasts', 'other'];
-          const REQUIRED_IDS = ['neutrophils','lymphocytes','monocytes','eosinophils','basophils'];
           const rows = ['Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range (×10³/µL)'];
           
           PB_CELLS.forEach((id) => {
@@ -962,54 +977,57 @@ document.addEventListener('keydown', e => {
         }
       });
 
-      const REQUIRED_IDS = ['neutrophils','lymphocytes','monocytes','eosinophils','basophils'];
       
+
       el('copyParagraph').addEventListener('click', () => {
         if (state.mode === 'bm') {
+
           // BM paragraph export
-          const total = BM_CELLS.reduce(
-            (sum, id) => sum + state.counts.bm[id],
-            0
-          ) || 1;
+          const total = BM_CELLS.reduce((sum, id) => sum + state.counts.bm[id], 0) || 1;
           const parts = [];
           BM_CELLS.forEach((id) => {
             const c = state.counts.bm[id];
-            if (c) {
-              const r = ((c / total) * 100).toFixed(1);
-              const ref = BM_REF_RANGES[id] || '-';
-              parts.push(
-                `${c} ${CELL_MAP[id].name} (${r}%, ref ${ref}%)`
-              );
-            }
+            // skip zero-counts unless it's a required cell
+            if (c === 0 && !REQUIRED_IDS.includes(id)) return;
+            const r   = ((c / total) * 100).toFixed(1);
+            const ref = BM_REF_RANGES[id] || '-';
+            parts.push(`${c} ${CELL_MAP[id].name} (${r}%, ref ${ref}%)`);
           });
+
+          /* ---- M : E ratio ---- */
+          const myeloid  = BM_MYELOID_IDS.reduce((sum, id) => sum + state.counts.bm[id], 0);
+          const erythroid = state.counts.bm['erythroid'] || 0;
+          const meRatio = erythroid ? (myeloid / erythroid).toFixed(1) : '—';
+          parts.push(`M:E ratio ${meRatio}`);
           clip(parts.join(', '));
+
         } else {
-    // PB paragraph export
-    const yrs = parseInt(el('ageYears').value) || 0;
-    const mos = parseInt(el('ageMonths').value) || 0;
-    const dys = parseInt(el('ageDays').value) || 0;
-    const age = yrs + mos / 12 + dys / 365;
-    const totalPB = Object.entries(state.counts.pb)
-      .reduce((sum, [id, count]) => id === 'nrbc' ? sum : sum + count, 0) || 1;
-    const w = parseFloat(el('wbcCount').value) || 0;
+            // PB paragraph export
+            const yrs = parseInt(el('ageYears').value) || 0;
+            const mos = parseInt(el('ageMonths').value) || 0;
+            const dys = parseInt(el('ageDays').value) || 0;
+            const age = yrs + mos / 12 + dys / 365;
+            const totalPB = Object.entries(state.counts.pb)
+              .reduce((sum, [id, count]) => id === 'nrbc' ? sum : sum + count, 0) || 1;
+            const w = parseFloat(el('wbcCount').value) || 0;
 
-    const parts = [];
-    PB_CELLS.forEach((id) => {
-      if (id === 'nrbc') return;
+            const parts = [];
+            PB_CELLS.forEach((id) => {
+              if (id === 'nrbc') return;
 
-      const c = state.counts.pb[id];
-      // skip zero‐counts unless it's one of the REQUIRED_IDS
-      if (c === 0 && !REQUIRED_IDS.includes(id)) return;
+              const c = state.counts.pb[id];
+              // skip zero‐counts unless it's one of the REQUIRED_IDS
+              if (c === 0 && !REQUIRED_IDS.includes(id)) return;
 
-      // compute even if c === 0
-      const r   = ((c / totalPB) * 100).toFixed(1);
-      const a   = ( (w * r / 100).toFixed(1) );
-      const ref = getRefRange(id, age);
+              // compute even if c === 0
+              const r   = ((c / totalPB) * 100).toFixed(1);
+              const a   = ( (w * r / 100).toFixed(1) );
+              const ref = getRefRange(id, age);
 
-      parts.push(
-        `${c} ${CELL_MAP[id].name} (rel: ${r}%, abs: ${a} (×10³/µL), ref ${ref}(×10³/µL))`
-      );
-    });
+              parts.push(
+                `${c} ${CELL_MAP[id].name} (rel: ${r}%, abs: ${a} (×10³/µL), ref ${ref}(×10³/µL))`
+              );
+            });
           // add NRBCs per 100 leukocytes
           const nrCount = state.counts.pb['nrbc'];
           const nrPer100 = ((nrCount / totalPB) * 100).toFixed(1);
