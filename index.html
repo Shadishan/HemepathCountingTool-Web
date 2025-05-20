@@ -936,12 +936,13 @@ document.addEventListener('keydown', e => {
           const w = parseFloat(el('wbcCount').value) || 0;
 
           const HIDE_IDS = ['metamyelocytes','myelocytes','promyelocytes','blasts', 'other'];
+          const REQUIRED_IDS = ['neutrophils','lymphocytes','monocytes','eosinophils','basophils'];
           const rows = ['Cell\tRelative %\tAbsolute (×10³/µL)\tRef Range (×10³/µL)'];
           
           PB_CELLS.forEach((id) => {
             if (id === 'nrbc') return;
             const c = state.counts.pb[id];
-            if (c === 0 && !HIDE_IDS.includes(id)) return;
+            if (c === 0 && !REQUIRED_IDS.includes(id)) return;
             const r = ((c / totalPB) * 100).toFixed(1);
             let a, ref;
             if (HIDE_IDS.includes(id)) {
@@ -961,6 +962,8 @@ document.addEventListener('keydown', e => {
         }
       });
 
+      const REQUIRED_IDS = ['neutrophils','lymphocytes','monocytes','eosinophils','basophils'];
+      
       el('copyParagraph').addEventListener('click', () => {
         if (state.mode === 'bm') {
           // BM paragraph export
@@ -981,33 +984,32 @@ document.addEventListener('keydown', e => {
           });
           clip(parts.join(', '));
         } else {
-          // PB paragraph export
-          const yrs = parseInt(el('ageYears').value) || 0;
-          const mos = parseInt(el('ageMonths').value) || 0;
-          const dys = parseInt(el('ageDays').value) || 0;
-          const age = yrs + mos / 12 + dys / 365;
-          const totalPB =
-            Object.entries(state.counts.pb).reduce(
-              (sum, [id, count]) =>
-                id === 'nrbc' ? sum : sum + count,
-              0
-            ) || 1;
-          const w = parseFloat(el('wbcCount').value) || 0;
+    // PB paragraph export
+    const yrs = parseInt(el('ageYears').value) || 0;
+    const mos = parseInt(el('ageMonths').value) || 0;
+    const dys = parseInt(el('ageDays').value) || 0;
+    const age = yrs + mos / 12 + dys / 365;
+    const totalPB = Object.entries(state.counts.pb)
+      .reduce((sum, [id, count]) => id === 'nrbc' ? sum : sum + count, 0) || 1;
+    const w = parseFloat(el('wbcCount').value) || 0;
 
-          const HIDE_IDS = ['metamyelocytes','myelocytes','promyelocytes','blasts', 'other'];
-          const parts = [];
-          PB_CELLS.forEach((id) => {
-            if (id === 'nrbc') return;
-            const c = state.counts.pb[id];
-            if (c) {
-              const r = ((c / totalPB) * 100).toFixed(1);
-              const a   = ((w * r / 100).toFixed(1));
-              const ref = getRefRange(id, age);
-              parts.push(
-                `${c} ${CELL_MAP[id].name} (rel: ${r}%, abs: ${a} (×10³/µL), ref ${ref}(×10³/µL))`
-              );
-            }
-          });
+    const parts = [];
+    PB_CELLS.forEach((id) => {
+      if (id === 'nrbc') return;
+
+      const c = state.counts.pb[id];
+      // skip zero‐counts unless it's one of the REQUIRED_IDS
+      if (c === 0 && !REQUIRED_IDS.includes(id)) return;
+
+      // compute even if c === 0
+      const r   = ((c / totalPB) * 100).toFixed(1);
+      const a   = ( (w * r / 100).toFixed(1) );
+      const ref = getRefRange(id, age);
+
+      parts.push(
+        `${c} ${CELL_MAP[id].name} (rel: ${r}%, abs: ${a} (×10³/µL), ref ${ref}(×10³/µL))`
+      );
+    });
           // add NRBCs per 100 leukocytes
           const nrCount = state.counts.pb['nrbc'];
           const nrPer100 = ((nrCount / totalPB) * 100).toFixed(1);
