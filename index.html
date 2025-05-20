@@ -937,7 +937,7 @@ document.addEventListener('keydown', e => {
 
           const meRatio = erythroid ? (myeloid / erythroid).toFixed(1) : '—';
           rows.push(`M:E ratio\t${meRatio}`);
-          clip(rows.join('\n'));
+          clipTable(rows.map(r => r.split('\t')));
 
         } else {
           // PB table export
@@ -973,7 +973,7 @@ document.addEventListener('keydown', e => {
           const nrCount = state.counts.pb['nrbc'];
           const nrPer100 = ((nrCount / totalPB) * 100).toFixed(1);
           rows.push(`NRBCs per 100 leukocytes\t${nrPer100}`);
-          clip(rows.join('\n'));
+          clipTable(rows.map(r => r.split('\t')));
         }
       });
 
@@ -1035,6 +1035,42 @@ document.addEventListener('keydown', e => {
           clip(parts.join(', '));
         }
       });
+
+      function makeHTMLTable(rows) {
+        const [header, ...bodyRows] = rows;
+
+        const ths = header.map(h =>
+          `<th style="border:1px solid #000;
+                      padding:2px 4px;
+                      background:#e7e7e7;
+                      font-weight:600;">${h}</th>`
+        ).join('');
+
+        const body = bodyRows.map((r, idx) => {
+          const bg = idx % 2 ? '#f4f8ff' : '#ffffff';   // zebra striping
+          return '<tr>' + r.map(c =>
+            `<td style="border:1px solid #000;
+                        padding:2px 4px;
+                        background:${bg};">${c}</td>`
+          ).join('') + '</tr>';
+        }).join('');
+
+        return `<table style="border-collapse:collapse">${ths ? `<tr>${ths}</tr>` : ''}${body}</table>`;
+      }
+
+      async function clipTable(tsvRows) {
+        const tsv  = tsvRows.map(r => r.join('\t')).join('\n');
+        const html = makeHTMLTable(tsvRows);
+
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html' : new Blob([html], {type:'text/html'}),
+            'text/plain': new Blob([tsv ], {type:'text/plain'})
+          })
+        ]);
+      }
+
+
     </script>
   </body>
 </html>
